@@ -1,0 +1,113 @@
+from rsf.proj import *
+
+# ------------------------------------------------------------
+# Parameters
+par = dict(nx=1000, ox=0, dx=0.005,  lx='x', ux='km',
+           nz=296,  oz=0, dz=0.005,  lz='z', uz='km',
+           ny=1000, oy=0, dy=0.005,  ly='y', uy='km',
+           nt=1126, ot=0, dt=0.0008, lt='t', ut='s',
+           nz_t=14,  oz_t=0.0,  dz_t=0.005,
+           nz_m=198, oz_m=0.07, dz_m=0.005,
+           nz_b=84,  oz_b=1.06, dz_b=0.005,
+           nsx=601, dsx=0.005, osx=1.0,
+           nrx=296,  drx=0.005,
+           osz=0.01, orx=2.5,
+           kt=200, jsnap=100,
+           f1=5, f2=10, f3=50, f4=100,
+           fhi=50, flo=5, nphi=10, nplo=10,
+           wantdat='n', wantwf='n',
+           depth=322, verb='y', imgj=12, itrevmin=000,
+           ictype=1
+          )
+#wplot.param(par)
+
+par['nzrefl']=par['nz']/4
+
+# Taper for data (in samples):
+par['taper']=0
+
+# Folder for sources and receivers
+folder_ss = 'ss/'
+folder_rr = 'rr/'
+
+#-------------------------------------------------------------
+#Perform RTM cross-correlation imaging
+Flow('vp','../data2/vp3D.rsf','cp')
+Flow('vp_pad_tp','vp','window n3=1 f3=0 | spray axis=3 n=224 d=0.005 o=-1.12')
+Flow('vp_pad_tmp',['vp_pad_tp','vp'],'cat axis=3 space=n ${SOURCES[1:2]}')
+Flow('vp_pad_lt','vp_pad_tmp','window n1=1 f1=0   | spray axis=1 n=200 d=0.005 o=-1')
+Flow('vp_pad_rt','vp_pad_tmp','window n1=1 f1=799 | spray axis=1 n=200 d=0.005 o=4')
+Flow('vp_pad_tmp2',['vp_pad_lt','vp_pad_tmp','vp_pad_rt'],'cat axis=1 space=n ${SOURCES[1:3]}')
+Flow('vp_pad_ft','vp_pad_tmp2','window n2=1 f2=0   | spray axis=2 n=200 d=0.005 o=-1')
+Flow('vp_pad_bk','vp_pad_tmp2','window n2=1 f2=799 | spray axis=2 n=200 d=0.005 o=4')
+Flow('vp3d_pad',['vp_pad_ft','vp_pad_tmp2','vp_pad_bk'],'cat axis=2 space=n ${SOURCES[1:3]}')
+#Flow('vp_pad_lt','vp_transp','window n1=1 f1=0   | transp plane=12 | spray axis=2 n=320 d=0.005 o=-1.6 | transp plane=12 | transp plane=23')
+#Flow('vp_pad_rt','vp_transp','window n1=1 f1=800 | transp plane=12 | spray axis=2 n=319 d=0.005 o=4.0 | transp plane=12 | transp plane=23')
+#Flow('vp_pad_tmp',['vp_pad_lt','vp_transp','vp_pad_rt'],'cat axis=1 space=n ${SOURCES[1:3]}')
+#Flow('vp_pad_tp','vp_pad_tmp','window n2=1 f2=0   | transp plane=12 | spray axis=2 n=320 d=0.005 o=-1.6 | transp plane=13')
+#Flow('vp_pad_bt','vp_pad_tmp','window n2=1 f2=200 | transp plane=12 | spray axis=2 n=311 d=0.005 o=1.0  | transp plane=13')
+#Flow('vp_pad',['vp_pad_tp','vp_pad_tmp','vp_pad_bt'],'cat axis=2 space=n ${SOURCES[1:3]}')
+
+#Flow('vp3d_pad','../data/vp3d.rsf','cp')
+
+Flow('img_pad','vp3d_pad','sfmath output="input*0" | put n4=1 d4=1 | transp plane=34 memsize=10000 | transp plane=23 memsize=10000 | transp plane=12 memsize=10000 | put o1=0 d1=0.005')
+
+par['npmin'] = 20
+par['npmax'] = 21
+
+par['nptot'] = par['npmax'] - par['npmin']
+
+Flow('swf_in','../data_prep/pwms_ifft.rsf','''
+    put d1=0.0024 |
+    transp plane=12 memsize=20000 |
+    costaper nw1=10 | 
+    pad beg1=224 n1=640 |
+    window f3=%(npmin)d n3=%(nptot)d | put d3=1. o3=0. '''%par)
+
+Flow('rwf_in','../data_prep/pwmr_ifft.rsf','''
+    window n2=600 n3=600 |
+    put d1=0.0024 |
+    transp plane=12 memsize=20000 | 
+    costaper nw1=10 |
+    transp plane=23 memsize=20000 |
+    costaper nw2=10 |
+    pad beg1=300 n1=1200 |
+    pad beg2=300 n2=1200 |
+    window f4=%(npmin)d n4=%(nptot)d | put d1=0.005 d2=0.005 o1=-1.0 o2=-1.0 d4=1 o4=0. '''%par)
+
+#Flow('swf_in_sinc','swf_in','transp plane=12 | sinc n2=1536 d2=0.0008 o2=-0.08 | transp plane=12 memsize=20000')
+
+#Flow('rwf_transp','../data_prep/pwmr_ifft.rsf','transp plane=12')
+#Flow('rwf_pad_lt','rwf_transp','window n1=1 f1=0   | transp plane=13 | transp plane=23 | spray axis=2 n=420 d=0.005 o=-1.6 | transp plane=13 | transp plane=12 | put o3=0')
+#Flow('rwf_pad_rt','rwf_transp','window n1=1 f1=600 | transp plane=13 | transp plane=23 | spray axis=2 n=419 d=0.005 o=3.5  | transp plane=13 | transp plane=12 | put o3=0')
+#Flow('rwf_pad',['rwf_pad_lt','rwf_transp','rwf_pad_rt'],'cat axis=1 space=n ${SOURCES[1:3]}')
+
+#Flow('rwf_in','rwf_pad','''
+#    put d2=0.0008 |
+#    transp plane=34 memsize=20000 |
+#    costaper nw1=10 |
+#    window min2=0 n2=1299 f3=%(npmin)d n3=%(nptot)d | put d1=0.005 o1=-1.6 d3=1 o3=0.'''%par)
+
+
+Flow(['rtm_out','data_out','swf_out','rwf_out'],['img_pad','vp3d_pad','swf_in','rwf_in'],
+        '''
+        /beegfs/sets/cwp/code/RSF/RSF4.2_CU12.2/RSFSRC/user/cwp_gpu/sfrtm3dGPU_DASVSP_CWM
+        vel=${SOURCES[1]}
+        swf=${SOURCES[2]}
+        rwf=${SOURCES[3]}
+        data=${TARGETS[1]}
+        swfout=${TARGETS[2]}
+        rwfout=${TARGETS[3]}
+        wantdat=%(wantdat)s wantwf=%(wantwf)s
+        rdepth=%(depth)d wfldj=100 verb=%(verb)s imgj=%(imgj)d
+        itrevmin=%(itrevmin)d ictype=%(ictype)d '''%par)
+
+Flow('rtm_window','rtm_out','window min2=1.5 max2=2.5 min3=1.5 max3=2.5 min4=0 max4=1')
+Flow('rtm','rtm_window','transp plane=13 memsize=2000 | transp plane=23 memsize=2000')
+
+#Result('vp_simple_scale','vp_pad','transp | window min1=0 max1=1 min2=1 max2=3 | grey gainpanel=a font=104 label1="Depth" unit1="km" label2="Distance" unit2="km" title="" screenratio=.35 screenht=4 color=j mean=y scalebar=y barlabel="Velocity" barunit="km/s"')
+#Result('plane_prop_frame5','swf_out','window n3=1 f3=7 | transp | window min1=0 max1=1 min2=1 max2=3 | grey gainpanel=a font=104 label1="Depth" unit1="km" label2="Distance" unit2="km" title="" screenratio=.35 screenht=4 pclip=99.7')
+
+
+End()
+
